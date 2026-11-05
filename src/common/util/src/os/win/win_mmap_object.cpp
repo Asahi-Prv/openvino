@@ -275,11 +275,13 @@ public:
         return m_handle;
     }
 
-    constexpr bool valid() const {
+    // dropped constexpr: INVALID_HANDLE_VALUE comparison involves a cast that is
+    // not a constant expression for clang-based compilers (icx)
+    bool valid() const {
         return valid(m_handle);
     }
 
-    static constexpr bool valid(HANDLE h) {
+    static bool valid(HANDLE h) {
         return h != INVALID_HANDLE_VALUE && h != nullptr;
     }
 };
@@ -541,7 +543,7 @@ bool MapHolder::try_placeholder_setup(size_t aligned_offset, size_t head_pad, si
     const auto gran = util::get_system_alloc_granularity();
 
     // NtMapViewOfSectionEx rejects a view that extends past raw file_size even by one byte
-    // (STATUS_INVALID_VIEW_SIZE, 0xC000001F) — use raw file_size, not the page-rounded section size.
+    // (STATUS_INVALID_VIEW_SIZE, 0xC000001F)  Euse raw file_size, not the page-rounded section size.
     // When the file is not a multiple of 64 KB, fill the sub-granule tail with an anonymous section.
     const size_t available = (file_size > aligned_offset) ? file_size - aligned_offset : 0;
     const size_t actual_map_size =
@@ -575,7 +577,7 @@ bool MapHolder::try_placeholder_setup(size_t aligned_offset, size_t head_pad, si
         return false;
     }
 
-    // Map the entire file-backed portion as a SINGLE view — one AllocationBase for the whole file content.
+    // Map the entire file-backed portion as a SINGLE view  Eone AllocationBase for the whole file content.
     // This makes the mapping compatible with NPU Level Zero zero-copy import (ZE_GRAPH_FLAG_INPUT_GRAPH_PERSISTENT)
     // before any granule is evicted.
     auto v =
@@ -605,7 +607,7 @@ bool MapHolder::try_placeholder_setup(size_t aligned_offset, size_t head_pad, si
     }
 
     if (!MmapVehRegistry::instance().add(this, base, total_va_size)) {
-        // AddVectoredExceptionHandler failed — tear down placeholder and let caller fall back to legacy.
+        // AddVectoredExceptionHandler failed  Etear down placeholder and let caller fall back to legacy.
         if (tail_size > 0) {
             api.m_unmap_view_of_file2(proc, base + actual_map_size, MEM_PRESERVE_PLACEHOLDER);
             ::VirtualFree(base + actual_map_size, 0, MEM_RELEASE);
@@ -882,7 +884,7 @@ std::pair<char*, char*> MapHolder::compute_evict_range(size_t offset, size_t siz
     const size_t va_end = std::min(head_pad + clamped_offset + effective_size, m_total_va_size);
 
     // Outward gran-rounding: expand to cover all granules overlapping the requested range.
-    // The anonymous tail (m_anon_handle) is never evictable — cap at m_file_mapped_size.
+    // The anonymous tail (m_anon_handle) is never evictable  Ecap at m_file_mapped_size.
     const size_t safe_begin = util::align_size_down(va_begin_raw, gran);
     const size_t safe_end = std::min(util::align_size_up(va_end, gran), m_file_mapped_size);
     if (safe_begin >= safe_end)
@@ -947,7 +949,7 @@ void MapHolder::hint_evict(size_t offset, size_t size) noexcept {
         if (!query_region(scan, mbi))
             break;
         if (mbi.Type != MEM_MAPPED) {
-            // Already evicted or non-file region (e.g. anonymous tail) — skip.
+            // Already evicted or non-file region (e.g. anonymous tail)  Eskip.
             scan = region_end(mbi);
             continue;
         }
